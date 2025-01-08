@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"time"
 )
@@ -22,6 +23,20 @@ var picResponseToContentLen string = `HTTP/1.1 200 OK\nContent-Type: image/gif\n
 
 // var picGoDevGopher string = `<img src="https://go.dev/blog/gopher/header.jpg" alt="">`
 var picGoDevGopherRel string = `<img src="gopher.jpg" alt="Gopher pic alt-text goes here">`
+
+type tcpServer struct {
+	address string // ":8080"
+	// there are multiple net.Conn per Server for each client-socket
+	// conn     net.Conn
+	listener    net.Listener
+	connections []net.Conn
+}
+
+func NewTcpServer(address string) *tcpServer {
+	return &tcpServer{
+		address: address,
+	}
+}
 
 func writePicture(conn net.Conn, filepath string) {
 	file, err := os.OpenFile(filepath, os.O_RDONLY, 0600)
@@ -52,26 +67,40 @@ func writePicture(conn net.Conn, filepath string) {
 
 }
 
-func writeHTTPContent(conn net.Conn, content string) {
-	slog.Debug("writeHTTPContent")
-	contentLen := len(content)
+func writeHTTPContent(conn net.Conn, body string) {
+	bodyLen := len(body)
 	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\n\n",
-		contentLen)
-	slog.Info("writeHTTPContent", "content-length", contentLen)
-	_, err := conn.Write([]byte(reponseHeader))
-	if err != nil {
-		slog.Error("Error writing  in client socket")
-		panic(err)
-	}
-	// write actual content
-	_, err = conn.Write([]byte(content))
+		bodyLen)
+	// write actual response
+	n, err := conn.Write([]byte(reponseHeader + body))
 	if err != nil {
 		slog.Error("Error writing in client socket")
 		panic(err)
 	}
+	slog.Info("TCP Response written.", "total-bytes=", n, "body-bytes", bodyLen)
 }
 
-func writeSocket(conn net.Conn, count int) {
+func getNextRequest(conn net.Conn) (method, path string) {
+	reader := bufio.NewReader(conn)
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		panic(err)
+	}
+	path = req.URL.Path
+	method = req.Method
+	return method, path
+}
+
+func writeSimpleResponse(conn net.Conn) {
+	method, path := getNextRequest(conn)
+
+	fmt.Println("Method=", method, "path=", path)
+	//slog.Info("TCP Request received.", "bytes", n)
+	fmt.Println("HTTP Request (inside writeSimpleResponse)")
+	writeHTTPContent(conn, "<b>Hello, World!</b>")
+}
+
+func writeSocket(conn net.Conn) {
 	fmt.Println("writing into socket!")
 	reponseHeader := fmt.Sprintf("HTTP/1.1 404\nContent-Length: %d\n\n", len(yt))
 	fmt.Println("len", len(yt))
@@ -86,8 +115,7 @@ func writeSocket(conn net.Conn, count int) {
 		slog.Error("Error writing  in client socket")
 		panic(err)
 	}
-	fmt.Printf("Connection=%d, bytes-written= %d",
-		count, n)
+	fmt.Printf("bytes-written= %d", n)
 	fmt.Println("written!")
 }
 
@@ -153,12 +181,31 @@ func serverSocketListener(ln net.Listener) {
 
 }
 
-func main() {
-	slog.Info("Start main")
-	ln, err := net.Listen("tcp", ":8080")
+func (srv *tcpServer) Shutdown() error {
+	return srv.listener.Close()
+}
+
+func (srv *tcpServer) startTCPServer(handleConnectionFn func(net.Conn)) {
+	ln, err := net.Listen("tcp", srv.address)
 	if err != nil {
-		slog.Error("Error net.Listen", "err", err)
 		panic(err)
 	}
-	serverSocketListener(ln)
+	srv.listener = ln
+
+	slog.Info("Listening on TCP Socket.", "address", srv.address)
+	for {
+		conn, err := srv.listener.Accept()
+		if err != nil {
+			panic(err)
+		}
+		srv.connections = append(srv.connections, conn)
+		go handleConnectionFn(conn)
+	}
+}
+
+func main() {
+	slog.Info("Start main")
+	server := NewTcpServer(":8080")
+	server.startTCPServer(writeSimpleResponse)
+	//serverSocketListener(ln)
 }
