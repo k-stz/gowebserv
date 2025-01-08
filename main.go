@@ -80,7 +80,7 @@ func writeHTTPContent(conn net.Conn, body string) {
 	slog.Info("TCP Response written.", "total-bytes=", n, "body-bytes", bodyLen)
 }
 
-func getNextRequest(conn net.Conn) (method, path string) {
+func getNextRequest(conn net.Conn) (method, path string, request *http.Request) {
 	reader := bufio.NewReader(conn)
 	req, err := http.ReadRequest(reader)
 	if err != nil {
@@ -88,16 +88,33 @@ func getNextRequest(conn net.Conn) (method, path string) {
 	}
 	path = req.URL.Path
 	method = req.Method
-	return method, path
+	return method, path, req
+}
+
+// Return string based on method and path
+func multiplexRequest(method, path string) string {
+	var body string
+	switch path {
+	case "/":
+		body = fmt.Sprintf("<b>Hello, World!:<br>Method=%s<br> Urlpath=%s",
+			method, path)
+	case "/hello":
+		body = "<b>Hello Endpoint reached</b>"
+	case "/favicon.ico":
+		body = "<b>someone asking for a favicon!?"
+	}
+	return body
 }
 
 func writeSimpleResponse(conn net.Conn) {
-	method, path := getNextRequest(conn)
+	method, path, _ := getNextRequest(conn)
 
 	fmt.Println("Method=", method, "path=", path)
 	//slog.Info("TCP Request received.", "bytes", n)
 	fmt.Println("HTTP Request (inside writeSimpleResponse)")
-	writeHTTPContent(conn, "<b>Hello, World!</b>")
+
+	body := multiplexRequest(method, path)
+	writeHTTPContent(conn, body)
 }
 
 func writeSocket(conn net.Conn) {
