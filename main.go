@@ -21,8 +21,7 @@ var hrefGopher string = `<img class="Hero-gopherLadder" src="./favicon.svg" alt=
 
 var picResponseToContentLen string = `HTTP/1.1 200 OK\nContent-Type: image/gif\nContent-Length: `
 
-// var picGoDevGopher string = `<img src="https://go.dev/blog/gopher/header.jpg" alt="">`
-var picGoDevGopherRel string = `<img src="pics/gopher.jpg" alt="Gopher pic al-text" width="500" height="600">`
+var picGoDevGopherRel string = `<img src="pics/gopher.jpg" alt="Gopher pic al-text" width="500">`
 
 type tcpServer struct {
 	address string // ":8080"
@@ -38,8 +37,8 @@ func NewTcpServer(address string) *tcpServer {
 	}
 }
 
-func writePicture(conn net.Conn, filepath string) {
-	fmt.Println("writing PIIICS filepath", filepath)
+func writePicture(conn net.Conn, contentType, filepath string) {
+	slog.Info("writePicture()", "file", filepath)
 	file, err := os.OpenFile(filepath, os.O_RDONLY, 0600)
 	defer func() {
 		err := file.Close()
@@ -53,21 +52,20 @@ func writePicture(conn net.Conn, filepath string) {
 	}
 	filesize := fileInfo.Size()
 
-	fmt.Println("writing picture...")
-	// TODO how to get size
-	reponseHeader := fmt.Sprintf("HTTP/1.1 200 OK\nContent-Type: image/jpeg\nContent-Length: %d\n\n", filesize)
+	reponseHeader := fmt.Sprintf("HTTP/1.1 200 OK\nContent-Type: %s\nContent-Length: %d\n\n",
+		contentType,
+		filesize)
 	_, err = conn.Write([]byte(reponseHeader))
 	if err != nil {
 		panic(err)
 	}
 
-	n, err := io.Copy(conn, file) // WORKs!
+	n, err := io.Copy(conn, file)
 	if err != nil {
-		fmt.Println("reached?")
 		panic(err)
 	}
-	fmt.Println("Written picture bytes:", n)
-
+	fmt.Println("Pic size written=", n)
+	conn.Close()
 }
 
 func writeHTTPContent(conn net.Conn, body string) {
@@ -98,6 +96,7 @@ func getNextRequest(conn net.Conn) (method, path string, request *http.Request) 
 // Return string based on method and path
 func multiplexRequest(conn net.Conn, method, path string) {
 	var body string
+	fmt.Println("  ### SWITCH PATH", path, "###")
 	switch path {
 	case "/":
 		body = fmt.Sprintf("<b>Hello, World!:<br>Method=%s<br> Urlpath=%s",
@@ -110,11 +109,9 @@ func multiplexRequest(conn net.Conn, method, path string) {
 		body = "<b>Hello Endpoint reached</b>"
 		writeHTTPContent(conn, body)
 	case "/favicon.ico":
-		// add support for favicon
-		body = "<b>someone asking for a favicon!?"
-		writeHTTPContent(conn, body)
+		writePicture(conn, "image/png", "pics/favicon.png")
 	case "/pics/gopher.jpg":
-		writePicture(conn, "pics/gopher.jpg")
+		writePicture(conn, "image/jpeg", "pics/gopher.jpg")
 	default:
 		body = fmt.Sprintf("Not implemented! Path=%s", path)
 	}
@@ -189,8 +186,6 @@ func handleConnection(conn net.Conn, count int) {
 	// this will attempt to request an img at
 	// writeHTTPContent(conn, picGoDevGopherRel)
 	writeHTTPContent(conn, simpleResponse)
-
-	//writePicture(conn, "gopher.jpg")
 
 }
 
