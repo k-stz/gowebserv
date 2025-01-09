@@ -22,7 +22,7 @@ var hrefGopher string = `<img class="Hero-gopherLadder" src="./favicon.svg" alt=
 var picResponseToContentLen string = `HTTP/1.1 200 OK\nContent-Type: image/gif\nContent-Length: `
 
 // var picGoDevGopher string = `<img src="https://go.dev/blog/gopher/header.jpg" alt="">`
-var picGoDevGopherRel string = `<img src="gopher.jpg" alt="Gopher pic alt-text goes here">`
+var picGoDevGopherRel string = `<img src="pics/gopher.jpg" alt="Gopher pic al-text" width="500" height="600">`
 
 type tcpServer struct {
 	address string // ":8080"
@@ -39,6 +39,7 @@ func NewTcpServer(address string) *tcpServer {
 }
 
 func writePicture(conn net.Conn, filepath string) {
+	fmt.Println("writing PIIICS filepath", filepath)
 	file, err := os.OpenFile(filepath, os.O_RDONLY, 0600)
 	defer func() {
 		err := file.Close()
@@ -46,18 +47,20 @@ func writePicture(conn net.Conn, filepath string) {
 			panic(err)
 		}
 	}()
+	fileInfo, err := file.Stat()
+	if err != nil {
+		panic(err)
+	}
+	filesize := fileInfo.Size()
 
 	fmt.Println("writing picture...")
 	// TODO how to get size
-	reponseHeader := fmt.Sprintf("HTTP/1.1 200 OK\nContent-Type: image/jpeg\nContent-Length: %d\n\n", 35704)
+	reponseHeader := fmt.Sprintf("HTTP/1.1 200 OK\nContent-Type: image/jpeg\nContent-Length: %d\n\n", filesize)
 	_, err = conn.Write([]byte(reponseHeader))
 	if err != nil {
 		panic(err)
 	}
 
-	// When writing this directly with
-	// curl throws an error
-	//* client returned ERROR on write of 16384 bytes
 	n, err := io.Copy(conn, file) // WORKs!
 	if err != nil {
 		fmt.Println("reached?")
@@ -78,6 +81,7 @@ func writeHTTPContent(conn net.Conn, body string) {
 		panic(err)
 	}
 	slog.Info("TCP Response written.", "total-bytes=", n, "body-bytes", bodyLen)
+	conn.Close() // I need to close it on each call!?
 }
 
 func getNextRequest(conn net.Conn) (method, path string, request *http.Request) {
@@ -92,29 +96,37 @@ func getNextRequest(conn net.Conn) (method, path string, request *http.Request) 
 }
 
 // Return string based on method and path
-func multiplexRequest(method, path string) string {
+func multiplexRequest(conn net.Conn, method, path string) {
 	var body string
 	switch path {
 	case "/":
 		body = fmt.Sprintf("<b>Hello, World!:<br>Method=%s<br> Urlpath=%s",
 			method, path)
+		// embed pic
+		body = body + "<br>" + picGoDevGopherRel
+		fmt.Println("writing body:", body)
+		writeHTTPContent(conn, body)
 	case "/hello":
 		body = "<b>Hello Endpoint reached</b>"
+		writeHTTPContent(conn, body)
 	case "/favicon.ico":
+		// add support for favicon
 		body = "<b>someone asking for a favicon!?"
+		writeHTTPContent(conn, body)
+	case "/pics/gopher.jpg":
+		writePicture(conn, "pics/gopher.jpg")
+	default:
+		body = fmt.Sprintf("Not implemented! Path=%s", path)
 	}
-	return body
 }
 
 func writeSimpleResponse(conn net.Conn) {
 	method, path, _ := getNextRequest(conn)
 
 	fmt.Println("Method=", method, "path=", path)
-	//slog.Info("TCP Request received.", "bytes", n)
 	fmt.Println("HTTP Request (inside writeSimpleResponse)")
 
-	body := multiplexRequest(method, path)
-	writeHTTPContent(conn, body)
+	multiplexRequest(conn, method, path)
 }
 
 func writeSocket(conn net.Conn) {
