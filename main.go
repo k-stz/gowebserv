@@ -73,6 +73,10 @@ func writePicture(conn net.Conn, contentType, filepath string) {
 
 func writeHTTPContent(conn net.Conn, body string) {
 	bodyLen := len(body)
+	// Though writing the HTTP Code comes sequetnially first in the response,
+	// because it is a bytebuffer. It is a better Idea to make it dependent
+	// on the body successfully rendeirng. Because it influences the HTTP
+	// Status code!
 	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\n\n",
 		bodyLen)
 	// write actual response
@@ -118,11 +122,12 @@ func genTemplate(path string) string {
 	buf := new(bytes.Buffer)
 	site := htmlSite{
 		Title:   "Welcome!",
-		DateStr: time.Now().Format(time.RFC822),
+		DateStr: time.Now().Format("02 Jan 06 15:04:05.000 MST"),
 		Date:    time.Now().UTC(),
 	}
 
-	tmpl := template.Must(template.New("my.tpl").Funcs(NewFuncMap()).ParseFiles("template/my.tpl"))
+	tmpl := template.Must(template.New("my.tpl").Funcs(NewFuncMap()).ParseFiles(
+		"template/my.tpl"))
 
 	err := tmpl.Execute(buf, site)
 	if err != nil {
@@ -146,6 +151,9 @@ func multiplexRequest(conn net.Conn, method, path string) {
 		writeHTTPContent(conn, body)
 	case "/hello":
 		body = "<b>Hello Endpoint reached</b>"
+		writeHTTPContent(conn, body)
+	case "/upload":
+		body = "<b>TODO: Time to implement upload!</b>"
 		writeHTTPContent(conn, body)
 	case "/favicon.ico":
 		writePicture(conn, "image/png", "pics/favicon.png")
