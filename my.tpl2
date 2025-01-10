@@ -1,0 +1,9 @@
+Title: {{ .Title }}
+{{- /* A comment */}}
+<br>My template :-) !
+<br>Some Text
+{{- /* another comment deleteing newline */}}
+<br>some more text
+<br>{{if true}}its true {{else}} its false! {{end}}
+
+Date: {{ .DateStr }}

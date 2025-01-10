@@ -2,12 +2,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"strings"
+	"text/template"
 	"time"
 )
 
@@ -93,6 +96,42 @@ func getNextRequest(conn net.Conn) (method, path string, request *http.Request) 
 	return method, path, req
 }
 
+type htmlSite struct {
+	Title   string
+	DateStr string
+	Date    time.Time
+}
+
+func NewFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"isTrue": func() bool {
+			return true
+		},
+		"upper": func(input string) string {
+			return strings.ToUpper(input)
+		},
+	}
+}
+
+func genTemplate(path string) string {
+	fmt.Println("## PARSING template...")
+	buf := new(bytes.Buffer)
+	site := htmlSite{
+		Title:   "Welcome!",
+		DateStr: time.Now().Format(time.RFC822),
+		Date:    time.Now().UTC(),
+	}
+
+	tmpl := template.Must(template.New("my.tpl").Funcs(NewFuncMap()).ParseFiles("template/my.tpl"))
+
+	err := tmpl.Execute(buf, site)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("rendered templ:", buf)
+	return "<b>TODO: rendered template here</b><br>" + buf.String()
+}
+
 // Return string based on method and path
 func multiplexRequest(conn net.Conn, method, path string) {
 	var body string
@@ -112,6 +151,9 @@ func multiplexRequest(conn net.Conn, method, path string) {
 		writePicture(conn, "image/png", "pics/favicon.png")
 	case "/pics/gopher.jpg":
 		writePicture(conn, "image/jpeg", "pics/gopher.jpg")
+	case "/template":
+		body := genTemplate("template/first.tpl")
+		writeHTTPContent(conn, body)
 	default:
 		body = fmt.Sprintf("Not implemented! Path=%s", path)
 	}
