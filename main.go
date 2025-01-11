@@ -77,16 +77,17 @@ func writeHTTPContent(conn net.Conn, body string) {
 	// because it is a bytebuffer. It is a better Idea to make it dependent
 	// on the body successfully rendeirng. Because it influences the HTTP
 	// Status code!
-	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\n\n",
+	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\r\nConnection: close\r\n\r\n",
 		bodyLen)
 	// write actual response
-	n, err := conn.Write([]byte(reponseHeader + body))
+	n, err := conn.Write([]byte(reponseHeader + body + "\r\n"))
 	if err != nil {
 		slog.Error("Error writing in client socket")
 		panic(err)
 	}
 	slog.Info("TCP Response written.", "total-bytes=", n, "body-bytes", bodyLen)
-	conn.Close() // I need to close it on each call!?
+
+	conn.Close()
 }
 
 func getNextRequest(conn net.Conn) (method, path string, request *http.Request) {
@@ -163,7 +164,8 @@ func multiplexRequest(conn net.Conn, method, path string) {
 		body := genTemplate("template/first.tpl")
 		writeHTTPContent(conn, body)
 	default:
-		body = fmt.Sprintf("Not implemented! Path=%s", path)
+		body = fmt.Sprintf("Not implemented!Method=%s Path=%s", method, path)
+		writeHTTPContent(conn, body)
 	}
 }
 

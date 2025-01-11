@@ -73,5 +73,11 @@ Content-Length: 16
 
 Once you press Enter after the HTML-bold-tagged "Hi there!", you’ll see the response rendered in your browser. Yay, human powers!
 
+## Close your HTTP connections
+When writing more complex html website, that would cause subsequent HTTP Request from a single visit closing your connection becomes mandatory in order to avoid blocking.
+For example when you want to serve a website with an `<img>`-tag that points to an image, the browser will first load the html with the `<img>`-tag and then request the picture inside the tag. Make sure that this request will either close its connection or use in its response the header `Connection: close` in order to signify the client (e.g. browser) that no more data is coming after serving the picture.
+
+Without eiter the `Connection: close` header or closing the connection (in go call `conn.Close()` on the net.Conn interface ) the browser/client might hang till it timeouts and never even fully download the picture and display it.
+
 # Sources:
 - regarding the Linux Socket API, highly recommend the book: "The Linux Programming Interface" (2010) by Michael Kerrisk. Especially Chapter 55 "Sockets: Introduction" and Chapter 58 "Sockets: Fundamentals of TCP/IP Network)" 
