@@ -21,7 +21,7 @@ Let’s walk through an example. Consider our web server running on `localhost:8
 
 On the server's side its connected pair socket is referred to as the "client socket,". And, still continuing with the server's point of view, the clients connected pair socket is referred to as the "remote/peer/foreign" socket.
 
-Programmatically, after the socket API's `accept()` system call completes, the TCP handshake will already have occurred (you can inspect this with Wireshark). The result is a connected pair into which both client and server can write bytes at any time. For example, a `curl localhost:8080/` command writes the following bytes, shown as ASCII, into its socket:
+Programmatically, after the socket API's `accept()` system call completes, the three-way TCP handshake will already have established a TCP connection (you can inspect this with Wireshark). The result is a connected pair into which both client and server can write bytes at any time. For example, a `curl localhost:8080/` command writes the following bytes, shown as ASCII, into its socket:
 
 ```sh
 GET / HTTP/1.1
@@ -30,9 +30,11 @@ User-Agent: curl/8.11.1
 Accept: */*
 ```
 
+Note: Per the standard all lines in HTTP have to be delimited with CR-LF (`\r\n`), (that's the internet standard in most protocols). But clients will usually give you leeway by also accepting a single newline with `\n`.
+
 This is the HTTP request, using the GET method on the URL path /.
 
-The web server can now send an HTTP response by writing the following directly into the client socket:
+The web server can now send an HTTP response by writing the headers (here: Content-Lenght, Content-Type) and body (here: "Hello World!\r\n") directly into the client socket:
 
 ```sh
 HTTP/1.1 404
@@ -42,4 +44,34 @@ Content-Type: text/plain; charset=utf-8
 Hello World!
 ```
 
+Note: The headers and body are separated by an additional blank line `\r\n\r\n`.
+
 The exact protocol definitions can be found in relevant RFCs, such as `RFC 1945` and friends.
+
+## Human-Powered Web Server
+To emphasize again the basics of a webserver is just writing the right order of bytes into a TCP socket, even when you do it by hand...! You can emulate a web server manually using tools like netcat. Start a TCP socket listening on port 5000 using a command like:
+```sh
+netcat -l -p 5000
+```
+
+Now visit `localhost:5000` in your browser. You’ll see the HTTP request show up in the netcat interactive session. It will look something like this:
+
+```sh
+GET / HTTP/1.1
+Host: localhost:5000
+...
+```
+
+At this point, the session will appear blocked, waiting for a response. You can act as a human-powered web server by typing out the response message manually. For example:
+
+```sh
+HTTP/1.1 200 OK
+Content-Length: 16
+
+<b>Hi there!</b>
+```
+
+Once you press Enter after the HTML-bold-tagged "Hi there!", you’ll see the response rendered in your browser. Yay, human powers!
+
+# Sources:
+- regarding the Linux Socket API, highly recommend the book: "The Linux Programming Interface" (2010) by Michael Kerrisk. Especially Chapter 55 "Sockets: Introduction" and Chapter 58 "Sockets: Fundamentals of TCP/IP Network)" 
