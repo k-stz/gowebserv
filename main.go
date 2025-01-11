@@ -90,6 +90,26 @@ func writeHTTPContent(conn net.Conn, body string) {
 	conn.Close()
 }
 
+func uploadBackend(conn net.Conn, body string, req *http.Request) {
+	fmt.Println(" #!# Uploading logic reached #!#")
+	fmt.Println("req:", req)
+	if req.Method != "POST" {
+		body = "Error: Only supports POST request. Given: " + req.Method
+	}
+	bodyLen := len(body)
+	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\r\nConnection: close\r\n\r\n",
+		bodyLen)
+	// write actual response
+	n, err := conn.Write([]byte(reponseHeader + body + "\r\n"))
+	if err != nil {
+		slog.Error("Error writing in client socket")
+		panic(err)
+	}
+	slog.Info("TCP Response written.", "total-bytes=", n, "body-bytes", bodyLen)
+
+	conn.Close()
+}
+
 func getNextRequest(conn net.Conn) (method, path string, request *http.Request) {
 	reader := bufio.NewReader(conn)
 	req, err := http.ReadRequest(reader)
@@ -105,6 +125,7 @@ type htmlSite struct {
 	Title   string
 	DateStr string
 	Date    time.Time
+	Address string
 }
 
 func NewFuncMap() template.FuncMap {
@@ -118,28 +139,33 @@ func NewFuncMap() template.FuncMap {
 	}
 }
 
-func genTemplate(path string) string {
+func genTemplate(srv *tcpServer, templateFileName string) string {
 	fmt.Println("## PARSING template...")
 	buf := new(bytes.Buffer)
 	site := htmlSite{
 		Title:   "Welcome!",
 		DateStr: time.Now().Format("02 Jan 06 15:04:05.000 MST"),
 		Date:    time.Now().UTC(),
+		Address: srv.address,
+	}
+	// impute "localhost" if address just port ":8000"
+	if len(strings.Split(site.Address, ":")) <= 2 {
+		site.Address = "localhost" + site.Address
 	}
 
-	tmpl := template.Must(template.New("my.tpl").Funcs(NewFuncMap()).ParseFiles(
-		"template/my.tpl"))
+	tmpl := template.Must(template.New(templateFileName).Funcs(NewFuncMap()).ParseFiles(
+		"template/" + templateFileName))
 
 	err := tmpl.Execute(buf, site)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("rendered templ:", buf)
-	return "<b>TODO: rendered template here</b><br>" + buf.String()
+	return buf.String()
 }
 
 // Return string based on method and path
-func multiplexRequest(conn net.Conn, method, path string) {
+func multiplexRequest(srv *tcpServer, conn net.Conn, method, path string, req *http.Request) {
 	var body string
 	fmt.Println("  ### SWITCH PATH", path, "###")
 	switch path {
@@ -155,27 +181,29 @@ func multiplexRequest(conn net.Conn, method, path string) {
 		writeHTTPContent(conn, body)
 	case "/upload":
 		body = "<b>TODO: Time to implement upload!</b>"
-		writeHTTPContent(conn, body)
+		writeHTTPContent(conn, genTemplate(srv, "upload.tpl"))
 	case "/favicon.ico":
 		writePicture(conn, "image/png", "pics/favicon.png")
 	case "/pics/gopher.jpg":
 		writePicture(conn, "image/jpeg", "pics/gopher.jpg")
 	case "/template":
-		body := genTemplate("template/first.tpl")
+		body := genTemplate(srv, "example.tpl")
 		writeHTTPContent(conn, body)
+	case "/upload-backend":
+		uploadBackend(conn, "<b>Upload time!</b>", req)
 	default:
 		body = fmt.Sprintf("Not implemented!Method=%s Path=%s", method, path)
 		writeHTTPContent(conn, body)
 	}
 }
 
-func writeSimpleResponse(conn net.Conn) {
-	method, path, _ := getNextRequest(conn)
+func writeSimpleResponse(srv *tcpServer, conn net.Conn) {
+	method, path, req := getNextRequest(conn)
 
 	fmt.Println("Method=", method, "path=", path)
 	fmt.Println("HTTP Request (inside writeSimpleResponse)")
 
-	multiplexRequest(conn, method, path)
+	multiplexRequest(srv, conn, method, path, req)
 }
 
 func writeSocket(conn net.Conn) {
@@ -261,7 +289,7 @@ func (srv *tcpServer) Shutdown() error {
 	return srv.listener.Close()
 }
 
-func (srv *tcpServer) startTCPServer(handleConnectionFn func(net.Conn)) {
+func (srv *tcpServer) startTCPServer(handleConnectionFn func(*tcpServer, net.Conn)) {
 	ln, err := net.Listen("tcp", srv.address)
 	if err != nil {
 		panic(err)
@@ -275,7 +303,7 @@ func (srv *tcpServer) startTCPServer(handleConnectionFn func(net.Conn)) {
 			panic(err)
 		}
 		srv.connections = append(srv.connections, conn)
-		go handleConnectionFn(conn)
+		go handleConnectionFn(srv, conn)
 	}
 }
 
