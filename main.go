@@ -96,7 +96,42 @@ func uploadBackend(conn net.Conn, body string, req *http.Request) {
 	if req.Method != "POST" {
 		body = "Error: Only supports POST request. Given: " + req.Method
 	}
+
+	fmt.Println("Writing to file...")
+
+	filepath := "uploads/myupload"
+	file, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0666)
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	if err != nil {
+		slog.Error("Creating/Opening file", "file", "filepath")
+		panic(err)
+	}
+
+	buf := new(bytes.Buffer)
+	n64, err := io.Copy(buf, req.Body)
+	if err != nil {
+		slog.Error("Buffering POST body")
+		panic(err)
+	}
+	fmt.Println("bytes in body:", n64)
+	// Reading from a bytes.Buffer consumes it!
+	// so we need to first park its content in body
+	body = body + "<br>" + buf.String()
+	n64, err = io.Copy(file, buf)
+	if err != nil {
+		slog.Error("Writing Post Request body to file")
+		panic(err)
+	}
+
+	body = body + "<br>" + buf.String() + "wow!"
+
 	bodyLen := len(body)
+
 	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\r\nConnection: close\r\n\r\n",
 		bodyLen)
 	// write actual response

@@ -13,8 +13,8 @@ import (
 func TestServer(t *testing.T) {
 	// Start the server.
 	srv := NewTcpServer(":5000")
-	go srv.startTCPServer(func(conn net.Conn) {
-		writeSimpleResponse(conn)
+	go srv.startTCPServer(func(srv *tcpServer, conn net.Conn) {
+		writeSimpleResponse(srv, conn)
 	})
 	// Wait a moment for the server to start
 	time.Sleep(500 * time.Millisecond)
