@@ -92,7 +92,6 @@ func writeHTTPContent(conn net.Conn, body string) {
 
 func uploadBackend(conn net.Conn, body string, req *http.Request) {
 	fmt.Println(" #!# Uploading logic reached #!#")
-	fmt.Println("req:", req)
 	if req.Method != "POST" {
 		body = "Error: Only supports POST request. Given: " + req.Method
 	}
@@ -127,15 +126,13 @@ func uploadBackend(conn net.Conn, body string, req *http.Request) {
 	fmt.Println("bytes in Multipart File:", n64)
 	// Reading from a bytes.Buffer consumes it!
 	// so we need to first park its content in body
-	body = body + "<br>" + buf.String()
 	n64, err = io.Copy(dst, buf)
 	if err != nil {
 		slog.Error("Writing Post Request body to file")
 		panic(err)
 	}
 
-	body = body + "<br>" + buf.String() + "wow!"
-
+	body = body + fmt.Sprintf("<br> Upload successful!<br>File uploaded to: %s<br>Bytes written: %d", "uploads/"+header.Filename, n64)
 	bodyLen := len(body)
 
 	reponseHeader := fmt.Sprintf("HTTP/1.1 200\nContent-Length: %d\r\nConnection: close\r\n\r\n",
@@ -231,7 +228,7 @@ func multiplexRequest(srv *tcpServer, conn net.Conn, method, path string, req *h
 		body := genTemplate(srv, "example.tpl")
 		writeHTTPContent(conn, body)
 	case "/upload-backend":
-		uploadBackend(conn, "<b>Upload time!</b>", req)
+		uploadBackend(conn, "<b>File Upload Result</b>", req)
 	default:
 		body = fmt.Sprintf("Not implemented!Method=%s Path=%s", method, path)
 		writeHTTPContent(conn, body)
